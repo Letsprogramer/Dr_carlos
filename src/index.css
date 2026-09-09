@@ -1,0 +1,95 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Serif+4:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+:root {
+  font-family: 'Source Serif 4', Georgia, serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #0A1F3D;
+  background-color: #FAFAF8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-oswald {
+  font-family: 'Oswald', sans-serif;
+}
+
+.font-serif {
+  font-family: 'Source Serif 4', serif;
+}
+
+h1,
+h2,
+h3,
+.font-bold {
+  font-family: 'Oswald', sans-serif;
+}
+
+.area-carousel {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.area-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #FAFAF8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.reveal-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+p {
+  margin: 0;
+}
+
+/* Logo helpers */
+.site-logo {
+  display: inline-block;
+  width: auto;
+  object-fit: contain;
+}
+
+/* If a white background around a logo looks disproportional, optionally use a subtle mask */
+.logo-wrap {
+  background: transparent;
+  padding: 2px;
+  border-radius: 6px;
+}

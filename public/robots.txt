@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://souzacamposadvise.com.br/sitemap.xml
