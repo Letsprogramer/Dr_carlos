@@ -5,8 +5,10 @@ A superfície de ataque se resume ao conteúdo servido e aos cabeçalhos HTTP.
 
 ## Cabeçalhos aplicados
 
-Configurados em [`vercel.json`](vercel.json) (deploy principal) e replicados em
-[`nginx.conf`](nginx.conf) (deploy alternativo em container):
+Produção é servidor próprio (nginx). Os cabeçalhos ficam em
+[`deploy/nginx-security-headers.conf`](deploy/nginx-security-headers.conf)
+(instalado como `/etc/nginx/snippets/souzacampos-security.conf`) e são espelhados
+em [`vercel.json`](vercel.json), usado só no ambiente de preview da Vercel:
 
 | Cabeçalho | Valor | Objetivo |
 |---|---|---|

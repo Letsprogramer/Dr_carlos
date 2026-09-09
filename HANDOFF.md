@@ -12,8 +12,8 @@ Documento de repasse para o próximo desenvolvedor.
 | Ícones | `lucide-react` |
 | Lint | `oxlint` |
 | Node | 20+ (desenvolvido em v24) |
-| Hospedagem | Vercel (site estático) |
-| Deploy alternativo | container com `nginx.conf` (não usado hoje) |
+| **Produção** | Servidor próprio (VPS) — nginx + Let's Encrypt/Certbot, deploy via rsync/SSH |
+| Preview | Vercel (`project-y9w3u`) — era só para o cliente ver antes de publicar; pode ser desativado |
 
 Não há back-end, banco de dados, formulários ou autenticação. O front **não lê
 variáveis de ambiente** (`import.meta.env` não é usado em nenhum lugar).
@@ -42,6 +42,10 @@ src/
     blogPosts.js        artigos do blog (conteúdo em blocos: h2/h3/quote/p)
 index.html             <title>, meta description, canonical, google-site-verification
 public/                favicons, logo, vídeo/imagens do hero, robots.txt, sitemap.xml
+deploy/
+  deploy.sh                    script de deploy (build + rsync + reload nginx)
+  nginx-security-headers.conf  snippet -> /etc/nginx/snippets/souzacampos-security.conf
+nginx.conf              config do site -> /etc/nginx/sites-available/...
 ```
 
 ### Editar conteúdo
@@ -52,70 +56,90 @@ public/                favicons, logo, vídeo/imagens do hero, robots.txt, sitem
 - **SEO por página:** hook `useSeo({...})` chamado dentro de cada página.
 - **Sitemap:** `public/sitemap.xml` é manual — atualizar ao criar/remover páginas.
 
-## 4. Deploy
+## 4. Deploy (produção = servidor próprio)
 
-O projeto já está ligado a um projeto Vercel (pasta `.vercel/`, **não** compartilhar).
+Fluxo: build local → envia `dist/` por rsync/SSH → recarrega o nginx.
 
-### Opção A — CLI (rápido)
+### Primeira vez no servidor
+1. Copiar o snippet de segurança:
+   ```bash
+   sudo cp deploy/nginx-security-headers.conf /etc/nginx/snippets/souzacampos-security.conf
+   ```
+2. Instalar a config do site:
+   ```bash
+   sudo cp nginx.conf /etc/nginx/sites-available/souzacamposadvise.com.br
+   sudo ln -s /etc/nginx/sites-available/souzacamposadvise.com.br /etc/nginx/sites-enabled/
+   ```
+   Conferir o `root` no `nginx.conf` (hoje `/usr/share/nginx/html`).
+3. Certificado (se ainda não existir):
+   ```bash
+   sudo certbot --nginx -d souzacamposadvise.com.br -d www.souzacamposadvise.com.br
+   ```
+4. Testar e recarregar: `sudo nginx -t && sudo systemctl reload nginx`
+
+### Deploy do dia a dia
 ```bash
-npm i -g vercel        # se necessário
-vercel login
-vercel                 # deploy de preview
-vercel --prod          # deploy de produção
+SSH_HOST=usuario@IP-do-servidor ./deploy/deploy.sh
 ```
+O script roda `npm ci && npm run build`, faz `rsync --delete` de `dist/` para
+`REMOTE_PATH` (default `/usr/share/nginx/html`) e recarrega o nginx.
 
-### Opção B — Git (recomendado a partir do repasse)
-1. Subir o repositório para GitHub/GitLab.
-2. No dashboard da Vercel: Project → Settings → Git → conectar o repositório.
-3. A partir daí cada push na branch de produção faz deploy automático.
-   - Build command: `npm run build`  ·  Output: `dist`  ·  Install: `npm install`
+> Sem rsync no Windows: rodar o script pelo Git Bash com rsync instalado, pelo WSL,
+> ou fazer manualmente `npm run build` + enviar o conteúdo de `dist/` por `scp`/SFTP
+> e depois `sudo systemctl reload nginx` no servidor.
 
-O `nginx.conf` **não é usado pela Vercel** — só serve para um deploy próprio em
-container/VPS. Se for esse o caminho, os certificados TLS vão em `/etc/nginx/ssl/`.
+### Renovação do certificado
+O Certbot renova sozinho (timer do systemd). Conferir: `sudo certbot renew --dry-run`.
 
 ## 5. Segurança
 
-Ver [`SECURITY.md`](SECURITY.md). Cabeçalhos (CSP, HSTS, X-Frame-Options, etc.)
-ficam em `vercel.json` e replicados em `nginx.conf`.
+Ver [`SECURITY.md`](SECURITY.md). Os cabeçalhos (CSP, HSTS, X-Frame-Options, etc.)
+vivem em **dois lugares que precisam ficar em sincronia**:
+- `deploy/nginx-security-headers.conf` → produção
+- `vercel.json` → preview da Vercel (enquanto existir)
+
 **Ao adicionar recurso externo novo (analytics, pixel, CDN, iframe, fonte), é
 obrigatório atualizar a CSP nos dois arquivos** ou o navegador bloqueia sem avisar.
+
+Detalhe do nginx: qualquer `add_header` dentro de um `location{}` cancela a herança
+dos `add_header` do bloco pai — por isso o `nginx.conf` faz `include` do snippet de
+segurança **dentro de cada `location`** que mexe em cabeçalho.
 
 ## 6. Acessos que precisam ser repassados
 
 | Acesso | Onde / observação |
 |---|---|
-| **Vercel** | Time `team_yifUl39Cx9TSkpgNkqmFP36p`, projeto `project-y9w3u`. Adicionar o novo dev como membro do time **ou** transferir o projeto (Settings → Advanced → Transfer). |
-| **Domínio** | `souzacamposadvise.com.br` — informar o registrador (registro.br provavelmente) e login. DNS aponta para a Vercel. |
-| **Google Search Console** | Existe verificação no `index.html` (`google-site-verification`). Repassar a propriedade no GSC / conta Google. |
-| **Repositório Git** | Criar e dar acesso (ver seção 7 — hoje **não existe** versionamento). |
-| **Variáveis de ambiente na Vercel** | Conferir Project → Settings → Environment Variables e repassar o que houver (o código atual não usa nenhuma). |
+| **Servidor (SSH)** | IP/host, usuário, chave ou senha. Onde ficam os arquivos (`root` do nginx) e a config (`/etc/nginx/sites-available/...`). Provedor da VPS + login do painel. |
+| **Domínio** | `souzacamposadvise.com.br` — registrador (provavelmente registro.br) e login. Conferir para onde o DNS (registro A) aponta: deve ser o IP do servidor. |
+| **Certificado TLS** | Let's Encrypt via Certbot no servidor — renovação automática, nada a pagar. |
+| **Repositório Git** | https://github.com/Letsprogramer/Dr_carlos — adicionar o novo dev em Settings → Collaborators. |
+| **Google Search Console** | Há verificação no `index.html` (`google-site-verification`). Repassar a propriedade / conta Google. |
+| **Vercel (opcional)** | Projeto `project-y9w3u`, time `team_yifUl39Cx9TSkpgNkqmFP36p`. Como produção saiu da Vercel, dá para **excluir o projeto** ou mantê-lo só como ambiente de preview. Se mantiver, adicionar o novo dev ao time. |
 | **Analytics** | Nenhum instalado no código no momento. |
 | **Contatos do cliente** | WhatsApp `+55 19 99251-6000`, Instagram `@ctcs.adv` (usados em links no site). |
-| **Imagens do hero/áreas** | Fotos de capa hoje vêm do CDN do Unsplash (hotlink). Ideal: baixar para `public/` e servir localmente. |
+| **Imagens do hero/áreas** | Capas hoje vêm do CDN do Unsplash (hotlink). Ideal: baixar para `public/` e servir localmente (some da CSP também). |
 
-## 7. Versionamento (fazer antes do repasse)
+## 7. Versionamento
 
-Hoje a pasta **não é um repositório git**. Antes de entregar:
+Repositório já criado e enviado:
 
-```bash
-git init
-git add .
-git commit -m "Estado atual do site"
-git branch -M main
-git remote add origin <URL-do-repo>
-git push -u origin main
-```
+- **Remote:** `origin` → https://github.com/Letsprogramer/Dr_carlos.git
+- **Branch:** `main`
+- `.gitignore` exclui `node_modules/`, `dist/`, `.env*` e `.vercel/`.
+- **Não** commitar `.env.local` nem `.vercel/` (contêm dados da conta Vercel de quem fez o deploy).
 
-O `.gitignore` já exclui `node_modules/`, `dist/`, `.env*` e `.vercel/`.
-**Não** commitar `.env.local` nem `.vercel/` (o novo dev gera o dele com `vercel link`).
+Fluxo sugerido para o novo dev: branch por alteração → PR → merge em `main` → `./deploy/deploy.sh`.
 
 ## 8. Checklist de repasse
 
-- [ ] Repositório git criado e enviado para o novo dev
-- [ ] Novo dev com acesso à Vercel (membro do time ou projeto transferido)
-- [ ] Domínio: registrador e DNS repassados
+- [x] Repositório git criado e enviado (github.com/Letsprogramer/Dr_carlos)
+- [ ] Novo dev adicionado como colaborador no GitHub
+- [ ] Acesso SSH ao servidor repassado (host, usuário, chave)
+- [ ] Provedor da VPS + painel repassados
+- [ ] Domínio: registrador e DNS repassados (registro A → IP do servidor)
 - [ ] Google Search Console repassado
-- [ ] Env vars da Vercel conferidas e repassadas (se houver)
+- [ ] Projeto Vercel: excluído ou repassado (decidir)
 - [ ] `npm install && npm run build` roda limpo na máquina do novo dev
-- [ ] `vercel --prod` (ou push no git) publica com sucesso
+- [ ] `./deploy/deploy.sh` publica com sucesso a partir da máquina do novo dev
+- [ ] `sudo certbot renew --dry-run` OK no servidor
 - [ ] Remover acessos antigos após confirmação
