@@ -5,11 +5,9 @@ A superfície de ataque se resume ao conteúdo servido e aos cabeçalhos HTTP.
 
 ## Cabeçalhos aplicados
 
-Os mesmos cabeçalhos existem em três formatos, um por tipo de host (manter em sincronia):
-[`vercel.json`](vercel.json) (Vercel), [`public/_headers`](public/_headers)
-(Cloudflare Pages / Netlify) e
-[`deploy/nginx-security-headers.conf`](deploy/nginx-security-headers.conf)
-(VPS, instalado como `/etc/nginx/snippets/souzacampos-security.conf`):
+Definidos em [`deploy/nginx-security-headers.conf`](deploy/nginx-security-headers.conf),
+instalado no servidor como `/etc/nginx/snippets/souzacampos-security.conf` e incluído
+pelo [`nginx.conf`](nginx.conf):
 
 | Cabeçalho | Valor | Objetivo |
 |---|---|---|
@@ -46,18 +44,18 @@ Domínios externos liberados e o motivo:
   Não há `'unsafe-inline'` em `script-src`.
 
 > **Ao adicionar um novo recurso externo** (CDN, script de analytics, pixel, iframe, fonte,
-> API), atualize a CSP no(s) arquivo(s) do host em uso, senão o recurso será bloqueado
-> silenciosamente pelo navegador.
+> API), atualize a CSP em `deploy/nginx-security-headers.conf` e reinstale o snippet no
+> servidor, senão o recurso será bloqueado silenciosamente pelo navegador.
 
 Ideal futuro: hospedar as fontes localmente e mover as imagens do Unsplash para `/public`,
 o que permite reduzir a CSP para `default-src 'self'` e remover o `'unsafe-inline'` de estilo.
 
 ## Segredos
 
-- `.env.local` contém um `VERCEL_OIDC_TOKEN` gerado automaticamente pelo Vercel CLI.
-  É de curta duração (~12 h) e já está coberto por `.gitignore` (`.env*`).
-- Nunca commitar `.env*` nem `.vercel/`.
-- Não há chaves de API no código do front-end.
+- Não há chaves de API nem segredos no código do front-end.
+- O repositório não contém credenciais. `.gitignore` bloqueia `.env*`.
+- Único segredo do deploy: a chave SSH usada para enviar os arquivos ao servidor —
+  fica na máquina de quem faz o deploy, nunca no repositório.
 
 ## Verificação pós-deploy
 

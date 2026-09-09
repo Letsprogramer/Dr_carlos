@@ -1,6 +1,8 @@
 # Handoff — Site Souza Campos Advocacia
 
 Documento de repasse para o próximo desenvolvedor.
+O site é estático e vai ser hospedado numa **VPS** (nginx). Tudo o que é preciso
+para subir está neste repositório.
 
 ## 1. Stack
 
@@ -13,6 +15,7 @@ Documento de repasse para o próximo desenvolvedor.
 | Lint | `oxlint` |
 | Node | 20+ (desenvolvido em v24) |
 | Build | `npm run build` → pasta `dist/` (100% estático) |
+| Servidor | nginx + Let's Encrypt/Certbot |
 
 Não há back-end, banco de dados, formulários ou autenticação. O front **não lê
 variáveis de ambiente** (`import.meta.env` não é usado em nenhum lugar).
@@ -40,12 +43,10 @@ src/
     areas.js           áreas de atuação (texto + imagem)
     blogPosts.js        artigos do blog (conteúdo em blocos: h2/h3/quote/p)
 index.html             <title>, meta description, canonical, google-site-verification
-public/
-  _headers, _redirects  config para Cloudflare Pages / Netlify
-  favicons, logo, hero, robots.txt, sitemap.xml
-vercel.json             config para deploy na Vercel (headers + SPA rewrite)
-nginx.conf              config para deploy em VPS própria (alternativa)
-deploy/                 script + snippet para o cenário de VPS própria
+public/                favicons, logo, vídeo/imagens do hero, robots.txt, sitemap.xml
+nginx.conf                          config do site  -> /etc/nginx/sites-available/...
+deploy/deploy.sh                    build + rsync + reload nginx
+deploy/nginx-security-headers.conf  cabeçalhos      -> /etc/nginx/snippets/...
 ```
 
 ### Editar conteúdo
@@ -56,55 +57,71 @@ deploy/                 script + snippet para o cenário de VPS própria
 - **SEO por página:** hook `useSeo({...})` chamado dentro de cada página.
 - **Sitemap:** `public/sitemap.xml` é manual — atualizar ao criar/remover páginas.
 
-## 4. Hospedagem e deploy
+## 4. Subir o site numa VPS
 
-O site é estático. O destino recomendado é um host de site estático com deploy
-por git (**Vercel** ou **Cloudflare Pages**): grátis, HTTPS automático, sem
-servidor para manter. O repositório já vem pronto para os dois.
+Pré-requisitos no servidor: nginx, certbot (plugin nginx), Node só se for buildar lá
+(o normal é buildar na máquina do dev e enviar só o `dist/`).
 
-> Importante: a conta de hospedagem deve ser **do cliente** (e‑mail do escritório),
-> não a conta pessoal de quem está repassando. Assim o próximo dev assume só com o login.
+### 4.1 Primeira instalação
 
-### Opção A — Vercel (recomendado)
-1. Criar conta em vercel.com com o e‑mail do cliente.
-2. **Add New → Project → Import** o repositório `Letsprogramer/Dr_carlos`.
-3. Framework detectado: **Vite** · Build: `npm run build` · Output: `dist`.
-4. Deploy. A Vercel lê o [`vercel.json`](vercel.json) (cabeçalhos de segurança + rewrite de SPA).
-5. **Settings → Domains** → adicionar `souzacamposadvise.com.br` e `www` → seguir os
-   registros DNS que a Vercel indicar (ver seção 6).
-6. Cada `git push` na `main` publica automaticamente.
+```bash
+# no servidor, como root/sudo
+# 1. snippet de cabeçalhos de segurança
+sudo cp deploy/nginx-security-headers.conf /etc/nginx/snippets/souzacampos-security.conf
 
-### Opção B — Cloudflare Pages
-Mesma ideia. Build `npm run build`, output `dist`. Usa
-[`public/_headers`](public/_headers) e [`public/_redirects`](public/_redirects)
-(copiados para `dist/` no build).
+# 2. config do site (ajuste "root" dentro do arquivo se a pasta for outra)
+sudo cp nginx.conf /etc/nginx/sites-available/souzacamposadvise.com.br
+sudo ln -s /etc/nginx/sites-available/souzacamposadvise.com.br /etc/nginx/sites-enabled/
 
-### Opção C — VPS própria (só se realmente quiser servidor)
-Arquivos prontos no repo: [`nginx.conf`](nginx.conf) e
-[`deploy/`](deploy/) (script `deploy.sh` com build + `rsync --delete` + reload, e
-o snippet `nginx-security-headers.conf` → `/etc/nginx/snippets/`). TLS via
-`certbot --nginx`. **Não** usar uma VPS compartilhada com outros projetos se o
-acesso vai ser repassado.
+# 3. pasta do site
+sudo mkdir -p /usr/share/nginx/html
+
+# 4. certificado (DNS do domínio já precisa apontar para este servidor)
+sudo certbot --nginx -d souzacamposadvise.com.br -d www.souzacamposadvise.com.br
+
+# 5. testar e recarregar
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 4.2 Deploy do dia a dia
+
+Da máquina do dev, na raiz do projeto:
+
+```bash
+SSH_HOST=usuario@IP-do-servidor ./deploy/deploy.sh
+```
+
+O script roda `npm ci && npm run build`, envia `dist/` com `rsync --delete` para
+`REMOTE_PATH` (default `/usr/share/nginx/html`) e recarrega o nginx.
+Variáveis aceitas: `SSH_HOST` (obrigatória), `REMOTE_PATH`, `SSH_PORT`.
+
+> Sem `rsync` no Windows: rodar pelo Git Bash com rsync instalado ou pelo WSL; ou
+> `npm run build` + enviar o conteúdo de `dist/` por `scp`/SFTP e recarregar o nginx.
+
+### 4.3 Renovação do certificado
+
+O Certbot renova sozinho (timer do systemd). Conferir: `sudo certbot renew --dry-run`.
 
 ## 5. Segurança
 
-Ver [`SECURITY.md`](SECURITY.md). Os mesmos cabeçalhos (CSP, HSTS, X‑Frame‑Options…)
-estão em **três formatos** que precisam ficar em sincronia:
-- [`vercel.json`](vercel.json) — Vercel
-- [`public/_headers`](public/_headers) — Cloudflare Pages / Netlify
-- [`deploy/nginx-security-headers.conf`](deploy/nginx-security-headers.conf) — VPS
+Ver [`SECURITY.md`](SECURITY.md). Os cabeçalhos (CSP, HSTS, X-Frame-Options, etc.)
+ficam em [`deploy/nginx-security-headers.conf`](deploy/nginx-security-headers.conf).
 
 **Ao adicionar recurso externo novo (analytics, pixel, CDN, iframe, fonte), atualize
-a CSP nos formatos usados** ou o navegador bloqueia o recurso sem avisar.
+a CSP nesse arquivo e reinstale o snippet no servidor**, senão o navegador bloqueia
+o recurso sem avisar.
+
+Detalhe do nginx: qualquer `add_header` dentro de um `location{}` cancela a herança
+dos `add_header` do bloco pai — por isso o `nginx.conf` faz `include` do snippet
+**dentro de cada `location`** que mexe em cabeçalho.
 
 ## 6. Acessos que precisam ser repassados
 
 | Acesso | Onde / observação |
 |---|---|
 | **Repositório Git** | https://github.com/Letsprogramer/Dr_carlos — transferir para uma conta/org do cliente **ou** adicionar o novo dev em Settings → Collaborators. |
-| **Hospedagem** | Conta Vercel/Cloudflare Pages criada com o e‑mail do cliente. Repassar o login (idealmente o cliente troca a senha e ativa 2FA). |
-| **Domínio** | `souzacamposadvise.com.br` — registrador (provavelmente registro.br) e login. É onde se troca o DNS para apontar da VPS antiga para o novo host. |
-| **Google Search Console** | Há verificação no `index.html` (`google-site-verification`). Repassar a propriedade / conta Google. |
+| **Domínio** | `souzacamposadvise.com.br` — registrador (provavelmente registro.br) e login. É onde o novo dev troca o registro **A** para o IP da VPS dele. |
+| **Google Search Console** | Há verificação no `index.html` (`google-site-verification`). Transferir a propriedade / conta Google. |
 | **Analytics** | Nenhum instalado no código no momento. |
 | **Contatos do cliente** | WhatsApp `+55 19 99251-6000`, Instagram `@ctcs.adv` (usados em links no site). |
 | **Imagens do hero/áreas** | Capas hoje vêm do CDN do Unsplash (hotlink). Ideal: baixar para `public/` e servir localmente (some da CSP também). |
@@ -112,21 +129,18 @@ a CSP nos formatos usados** ou o navegador bloqueia o recurso sem avisar.
 ## 7. Versionamento
 
 - **Remote:** `origin` → https://github.com/Letsprogramer/Dr_carlos.git · **Branch:** `main`
-- `.gitignore` exclui `node_modules/`, `dist/`, `.env*` e `.vercel/`.
-- `.gitattributes` força LF em `.sh`/`.conf`.
-- **Não** commitar `.env.local` nem `.vercel/`.
+- `.gitignore` exclui `node_modules/` e `dist/`. `.gitattributes` força LF em `.sh`/`.conf`.
+- Não há credenciais no repositório.
 
 ## 8. Roteiro de migração (tirar da VPS atual)
 
-1. [ ] Criar a conta de hospedagem no nome do cliente (seção 4A/4B).
-2. [ ] Conectar o repositório e fazer o primeiro deploy — testar na URL provisória
-       (`*.vercel.app` / `*.pages.dev`).
-3. [ ] Conferir cabeçalhos na URL provisória: https://securityheaders.com.
-4. [ ] Adicionar o domínio no novo host e **trocar o DNS** no registrador
-       (registro A/CNAME conforme o host indicar). Aguardar propagação.
-5. [ ] Confirmar `https://souzacamposadvise.com.br` servindo pelo novo host, com HTTPS válido.
+1. [ ] Dar acesso ao repositório para o novo dev (transferir ou colaborador).
+2. [ ] Novo dev sobe o site na VPS **dele** (seção 4) e testa pelo IP / domínio de teste.
+3. [ ] Conferir cabeçalhos: https://securityheaders.com.
+4. [ ] Trocar o registro **A** do domínio no registrador para o IP da nova VPS. Aguardar propagação.
+5. [ ] Confirmar `https://souzacamposadvise.com.br` servindo pela nova VPS, com HTTPS válido.
 6. [ ] **Desativar na VPS antiga:** remover os arquivos do site, remover o `server{}`
        do nginx, `sudo certbot delete --cert-name souzacamposadvise.com.br`,
        `sudo systemctl reload nginx`.
-7. [ ] Repassar os acessos da seção 6 ao cliente / novo dev.
+7. [ ] Repassar domínio e Google Search Console ao cliente / novo dev.
 8. [ ] Remover seus próprios acessos após a confirmação.
