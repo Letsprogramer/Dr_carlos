@@ -5,10 +5,11 @@ A superfície de ataque se resume ao conteúdo servido e aos cabeçalhos HTTP.
 
 ## Cabeçalhos aplicados
 
-Produção é servidor próprio (nginx). Os cabeçalhos ficam em
+Os mesmos cabeçalhos existem em três formatos, um por tipo de host (manter em sincronia):
+[`vercel.json`](vercel.json) (Vercel), [`public/_headers`](public/_headers)
+(Cloudflare Pages / Netlify) e
 [`deploy/nginx-security-headers.conf`](deploy/nginx-security-headers.conf)
-(instalado como `/etc/nginx/snippets/souzacampos-security.conf`) e são espelhados
-em [`vercel.json`](vercel.json), usado só no ambiente de preview da Vercel:
+(VPS, instalado como `/etc/nginx/snippets/souzacampos-security.conf`):
 
 | Cabeçalho | Valor | Objetivo |
 |---|---|---|
@@ -45,8 +46,8 @@ Domínios externos liberados e o motivo:
   Não há `'unsafe-inline'` em `script-src`.
 
 > **Ao adicionar um novo recurso externo** (CDN, script de analytics, pixel, iframe, fonte,
-> API), atualize a CSP nos **dois** arquivos, senão o recurso será bloqueado silenciosamente
-> pelo navegador.
+> API), atualize a CSP no(s) arquivo(s) do host em uso, senão o recurso será bloqueado
+> silenciosamente pelo navegador.
 
 Ideal futuro: hospedar as fontes localmente e mover as imagens do Unsplash para `/public`,
 o que permite reduzir a CSP para `default-src 'self'` e remover o `'unsafe-inline'` de estilo.
